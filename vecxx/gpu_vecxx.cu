@@ -6,7 +6,7 @@
 class Double
 {
 public:
-    __host__ __device__
+    __device__
     float operator()(float val)
     {
         return 2*val;
@@ -22,18 +22,9 @@ void gpu_kernel(float * buf, F func)
     buf[idx] = func(buf[idx]);
 }
 
-template<typename F>
-void cpu_kernel(float * buf, F func)
-{
-    for (int idx = 0; idx<NUM; ++idx)
-    {
-        buf[idx] = func(buf[idx]);
-    }
-}
-
 void gpu_run(void)
 {
-    std::cout << "gpu" << std::endl;
+    std::cout << std::endl << "gpu" << std::endl;
     std::vector<float> h_buf(NUM, 1);
 
     float * d_buf;
@@ -46,23 +37,13 @@ void gpu_run(void)
 
     cudaMemcpy(h_buf.data(), d_buf, NUM*sizeof(float), cudaMemcpyDeviceToHost);
    
-    std::cout << 0 << ":" << h_buf[0] << std::endl << std::endl;
+    std::cout << "  0:" << h_buf[0] << std::endl;
+    std::cout << "511:" << h_buf[511] << std::endl;
 
     cudaFree(d_buf);
 }
 
-void cpu_run(void)
-{
-    std::cout << "cpu" << std::endl;
-    std::vector<float> h_buf(NUM, 1);
-    
-    cpu_kernel(h_buf.data(), Double());
-   
-    std::cout << 0 << ":" << h_buf[0] << std::endl << std::endl;
-}
-
 int main()
 {
-    cpu_run();
     gpu_run();
 }
