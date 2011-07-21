@@ -6,7 +6,8 @@
 #include "porting.hpp"
 
 #define LIGHT_NUM (1)
-#define OBJECT_NUM (1+13)
+#define OBJECT_NUM (1+15)
+//#define OBJECT_NUM (1+5)
 #define REFLECT_NUM (5)
 
 namespace gtc
@@ -131,7 +132,7 @@ public:
     FUNC_DECL
     Primitive(const Material& material)
         : material_(material), invisible_color_(RGBA(0, 0, 0)) {}
-
+    
     /* calculate intersect between ray and itself */
     FUNC_DECL 
     virtual Intersect intersect(const Ray& ray) const = 0;
@@ -312,45 +313,51 @@ public:
                          Primitive ** primitives, unsigned int primitive_num,
                          const Intersect & isect) const
     { 
-        RGBA pixel = material_.color;
-
-        for (unsigned int i=0; i<light_num; ++i)
+        if (0.0f < material_.luminescence)
         {
-            const Coord & light = lights[i];
-            
-            if (isect.normal.dot(light-isect.coord) <= 0.0f)
+            return material_.color * material_.luminescence * isect.reflection;
+        }
+        else
+        {
+            RGBA pixel = material_.color;
+            for (unsigned int i=0; i<light_num; ++i)
             {
-                return Primitive::invisible_color_;
-            }
- 
-            Ray ray(light, isect.coord - light, 1.0);
+                const Coord & light = lights[i];
 
-            Intersect my_isect = this->intersect(ray);
-
-            for (unsigned int j=0; j<primitive_num; ++j)
-            {
-                Intersect other_isect;
-                const Primitive * primitive = primitives[j];
-
-                if (this == primitive || NULL == primitive)
-                {
-                    continue;
-                }
-
-                other_isect = primitive->intersect(ray);
-                
-                if (NULL != other_isect.primitive && 
-                    other_isect.distance < my_isect.distance)
+                if (isect.normal.dot(light-isect.coord) <= 0.0f)
                 {
                     return Primitive::invisible_color_;
                 }
-            }
-            
-            float lambert = fabs(ray.direction.dot(isect.normal));
-            pixel = material_.color * lambert * isect.reflection;
-        }
 
-        return pixel;
+                Ray ray(light, isect.coord - light, 1.0);
+
+                Intersect my_isect = this->intersect(ray);
+
+                for (unsigned int j=0; j<primitive_num; ++j)
+                {
+                    Intersect other_isect;
+                    const Primitive * primitive = primitives[j];
+
+                    if (this == primitive || NULL == primitive)
+                    {
+                        continue;
+                    }
+
+                    other_isect = primitive->intersect(ray);
+
+                    if (NULL != other_isect.primitive && 
+                            other_isect.distance < my_isect.distance)
+                    {
+                        return Primitive::invisible_color_;
+                    }
+                }
+
+                float lambert = fabs(ray.direction.dot(isect.normal));
+                pixel = material_.color * lambert * isect.reflection;
+            }
+
+            return pixel;
+        }
     }
 };
 
@@ -451,45 +458,52 @@ public:
                          Primitive ** primitives, unsigned int primitive_num,
                          const Intersect & isect) const
     {
-        RGBA pixel = material_.color;
-
-        for (unsigned int i=0; i<light_num; ++i)
+        if (0.0f < material_.luminescence)
         {
-            const Coord & light = lights[i];
+            return material_.color * material_.luminescence * isect.reflection;
+        }
+        else
+        {
+            RGBA pixel = material_.color;
 
-            if (isect.normal.dot(light-isect.coord) <= 0.0f)
+            for (unsigned int i=0; i<light_num; ++i)
             {
-                return Primitive::invisible_color_;
-            }
+                const Coord & light = lights[i];
 
-            Ray ray(light, isect.coord - light, 1.0);
-
-            Intersect my_isect = this->intersect(ray);
-
-            for (unsigned int j=0; j<primitive_num; ++j)
-            {
-                Intersect other_isect;
-                const Primitive * primitive = primitives[j];
-
-                if (NULL == primitive)
-                {
-                    continue;
-                }
-
-                other_isect = primitive->intersect(ray);
-                
-                if (NULL != other_isect.primitive && 
-                    other_isect.distance < my_isect.distance)
+                if (isect.normal.dot(light-isect.coord) <= 0.0f)
                 {
                     return Primitive::invisible_color_;
                 }
+
+                Ray ray(light, isect.coord - light, 1.0);
+
+                Intersect my_isect = this->intersect(ray);
+
+                for (unsigned int j=0; j<primitive_num; ++j)
+                {
+                    Intersect other_isect;
+                    const Primitive * primitive = primitives[j];
+
+                    if (NULL == primitive)
+                    {
+                        continue;
+                    }
+
+                    other_isect = primitive->intersect(ray);
+
+                    if (NULL != other_isect.primitive && 
+                            other_isect.distance < my_isect.distance)
+                    {
+                        return Primitive::invisible_color_;
+                    }
+                }
+
+                float lambert = fabs(ray.direction.dot(isect.normal));
+                pixel = material_.color * lambert * isect.reflection;
             }
 
-            float lambert = fabs(ray.direction.dot(isect.normal));
-            pixel = material_.color * lambert * isect.reflection;
+            return pixel;
         }
-
-        return pixel;
     }
 };
 
@@ -587,13 +601,24 @@ public:
                                 Coord(+4.0f, -4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, -8.0f));
 
+        /* Floor light */
+        primitives_[14] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f),
+                                Coord(-1.0f, +3.99f, -5.0f),
+                                Coord(-1.0f, +3.99f, -4.0f), 
+                                Coord(+1.0f, +3.99f, -4.0f));
+
+        primitives_[15] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f),
+                                Coord(+1.0f, +3.99f, -5.0f),
+                                Coord(-1.0f, +3.99f, -5.0f), 
+                                Coord(+1.0f, +3.99f, -4.0f));
+
 
 #elif 0
-        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 1.0, 0.0f), 
+        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(+20.0, -20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
-        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 1.0, 0.0f), 
+        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(-20.0, +20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
@@ -678,10 +703,10 @@ public:
             if (NULL != isects[i].primitive)
             {
                 pixel = pixel.add_sat(isects[i].primitive->shading(&lights_[0], 
-                                                             LIGHT_NUM, 
-                                                             &primitives_[0], 
-                                                             OBJECT_NUM, 
-                                                             isects[i]));
+                                                           LIGHT_NUM, 
+                                                           &primitives_[0], 
+                                                           OBJECT_NUM, 
+                                                           isects[i]));
             }
         }
        
