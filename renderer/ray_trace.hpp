@@ -696,7 +696,7 @@ public:
         
         /* Ball light */
         primitives_[9] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 25.0f), 
-                              Coord(0.0f, +2.0f, +2.0f), 0.1f);
+                              Coord(0.0f, +2.0f, +1.0f), 0.1f);
 
     
     }
