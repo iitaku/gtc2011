@@ -47,13 +47,7 @@ namespace gtc
                 ss << "Real Time Raytracing : "
                    << std::setw(5) << std::left << std::setprecision(4) 
                    << fps << " fps";
-#ifdef USE_CUDA
-                Performance kernel_perf("kernel", false);
-                Performance transfer_perf("transfer", false);
 
-                ss << " kernel : " << kernel_perf.mean_ms() << "ms ";
-                ss << " transfer : " << transfer_perf.mean_ms() << "ms ";
-#endif
                 glutSetWindowTitle(ss.str().c_str());
 
                 frame_count++;
@@ -192,27 +186,19 @@ namespace gtc
             dim3 grid_size(width_/16, height_/16);
             dim3 block_size(16, 16);
             
-            Performance perf_kernel("kernel");
-            
             render_kernel<<<grid_size, block_size>>>(d_scene_p_, d_image_, width_, height_);
 
-            perf_kernel.stop();
-
-            Performance perf_transfer("transfer");
-            
             cudaMemcpy(image_, d_image_, width_*height_*sizeof(RGBA8U), cudaMemcpyDeviceToHost);
-            
-            perf_transfer.stop();
 #else
+            
             for (int y=0; y<height_; ++y)
-            //for (int y=256; y<height_; ++y)
             {
                 for (int x=0; x<width_; ++x)
-                //for (int x=256; x<width_; ++x)
                 {
                     image_[y*width_+x] = scene_->render(x, y);
                 }
             }
+
 #endif
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 
                          width_, height_, 0, GL_RGBA,

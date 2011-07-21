@@ -15,9 +15,6 @@ namespace gtc
 typedef RGBA8U RGBA;
 class Object;
 
-static int deb_x;
-static int deb_y;
-
 static int frame_count = 0;
 
 struct Ray
@@ -523,11 +520,6 @@ public:
     RGBA8U render(int x, int y)
     {
 
-#ifndef USE_CUDA        
-        deb_x = x;
-        deb_y = y;
-#endif
-
         Coord screen_coord = screen_+
             Coord(screen_width_*static_cast<float>(x)/static_cast<float>(width_),
                   screen_height_*static_cast<float>(y)/static_cast<float>(height_),
@@ -575,27 +567,7 @@ public:
         } while (NULL != isects[reflect_count-1].obj && 
                  0.0f < isects[reflect_count-1].reflection &&
                  reflect_count < REFLECT_NUM);
-        
-        //if (0 == frame_count)
-        //{
-        //    std::cout << "(" << std::setw(3) << std::right << x << "," 
-        //                     << std::setw(3) << std::right << y << ") : ";
-        //    for (unsigned int i=0; i<reflect_count;++i)
-        //    {
-        //        int k;
-        //        for (k=0; k<OBJECT_NUM; ++k)
-        //        {
-        //            if (objs_[k] == isects[i].obj)
-        //            {
-        //                break;
-        //            }
-        //        }
-        //        
-        //        std::cout << std::setw(3) << std::left << k << " -> ";
-        //    }
-        //    std::cout << "eol" << std::endl;
-        //}
-
+       
         for (unsigned int i=0; i<reflect_count; ++i)
         {
             if (NULL != isects[i].obj)
