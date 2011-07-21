@@ -14,6 +14,7 @@ set(GL_LIBRARIES "")
 set(GLUT_LIBRARIES glut)
 endif()
 
+add_definitions(-g)
 add_executable(cpu_renderer main.cpp)
 target_link_libraries(cpu_renderer ${GL_LIBRARIES} ${GLUT_LIBRARIES})
 

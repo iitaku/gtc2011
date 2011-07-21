@@ -216,10 +216,10 @@ namespace gtc
             glClear(GL_COLOR_BUFFER_BIT);
 
             glBegin(GL_POLYGON);
-            glTexCoord2f(0, 0); glVertex2f(-0.95 , -0.95);
-            glTexCoord2f(1, 0); glVertex2f(0.95 , -0.95);
-            glTexCoord2f(1, 1); glVertex2f(0.95 , 0.95);
-            glTexCoord2f(0, 1); glVertex2f(-0.95 , 0.95);
+            glTexCoord2f(0, 1); glVertex2f(-0.95 , -0.95);
+            glTexCoord2f(1, 1); glVertex2f(0.95 , -0.95);
+            glTexCoord2f(1, 0); glVertex2f(0.95 , 0.95);
+            glTexCoord2f(0, 0); glVertex2f(-0.95 , 0.95);
             glEnd();
 
             glutSwapBuffers();
@@ -233,16 +233,22 @@ namespace gtc
             switch(key)
             {
                 case 'h':
-                    displacement = Vector(-0.1, 0.0, 0.0);
+                    displacement = Vector(-0.2, 0.0, 0.0);
                     break;
                 case 'j':
-                    displacement = Vector(0.0, 0.0, -0.1);
+                    displacement = Vector(0.0, 0.0, -0.2);
                     break;
                 case 'k':
-                    displacement = Vector(0.0, 0.0, +0.1);
+                    displacement = Vector(0.0, 0.0, +0.2);
                     break;
                 case 'l':
-                    displacement = Vector(+0.1, 0.0, 0.0);
+                    displacement = Vector(+0.2, 0.0, 0.0);
+                    break;
+                case 'u':
+                    displacement = Vector(0.0, -0.2, 0.0);
+                    break;
+                case 'i':
+                    displacement = Vector(0.0, +0.2, 0.0);
                     break;
                 case 'L':
                     std::cout << x << ":" << y << std::endl;

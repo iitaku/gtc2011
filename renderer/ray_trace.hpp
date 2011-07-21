@@ -6,7 +6,7 @@
 #include "porting.hpp"
 
 #define LIGHT_NUM (1)
-#define OBJECT_NUM (1+15)
+#define PRIMITIVE_NUM (1+9)
 #define REFLECT_NUM (5)
 
 namespace gtc
@@ -150,7 +150,37 @@ public:
 
     /* calculate shading at intersect coord */
     FUNC_DECL 
-    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const = 0;
+    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const
+    {
+        if (0.0f < material_.luminescence)
+        {
+            return material_.color * material_.luminescence * isect.reflection;
+        }
+        else
+        {
+            RGBA pixel;
+
+            for (unsigned int i=0; i<primitive_num; ++i)
+            {
+                if (NULL == primitives[i])
+                {
+                    continue;
+                }
+
+                Light light = primitives[i]->lighting(primitives, primitive_num, isect);
+
+                if (0 == light.ray.strong)
+                {
+                    continue;
+                }
+
+                float lambert = fabs(light.ray.direction.dot(isect.normal));
+                pixel = pixel.add_sat(material_.color * lambert * isect.reflection * light.ray.strong);
+            }
+
+            return pixel;
+        }
+    }
 
     /* displace coord */
     FUNC_DECL 
@@ -210,7 +240,7 @@ private:
     {
         Vector v01 = v1_-v0_;
         Vector v02 = v2_-v0_;
-        return v02.cross(v01).normalize();
+        return v01.cross(v02).normalize();
     }
 
 public:
@@ -251,21 +281,21 @@ public:
         
         Vector d0p = p - v0_;
         Vector d01 = v1_ - v0_;
-        if (d0p.cross(d01).dot(normal_) < 0)
+        if (d01.cross(d0p).dot(normal_) < 0)
         {
             return Intersect();
         }
         
         Vector d1p = p - v1_;
         Vector d12 = v2_ - v1_;
-        if (d1p.cross(d12).dot(normal_) < 0)
+        if (d12.cross(d1p).dot(normal_) < 0)
         {
             return Intersect();
         }
 
         Vector d2p = p - v2_;
         Vector d20 = v0_ - v2_;
-        if (d2p.cross(d20).dot(normal_) < 0)
+        if (d20.cross(d2p).dot(normal_) < 0)
         {
             return Intersect();
         }
@@ -328,35 +358,160 @@ public:
     }
 
     FUNC_DECL 
-    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const
-    { 
+    virtual void displace(const Vector& displacement)
+    {
+        v0_ = v0_ + displacement;
+        v1_ = v1_ + displacement;
+        v2_ = v2_ + displacement;
+        center_ = calc_center();
+        normal_ = calc_normal();
+    }
+};
+
+class Square : public Primitive
+{
+private:
+    Coord v0_;
+    Coord v1_;
+    Coord v2_;
+    Coord v3_;
+
+    Coord center_;
+    Vector normal_;
+    
+    FUNC_DECL
+    Vector calc_center()
+    {
+        return (v0_ + v1_ + v2_ + v3_) / 3.0f;
+    }
+
+    FUNC_DECL
+    Vector calc_normal()
+    {
+        Vector v01 = v1_-v0_;
+        Vector v03 = v3_-v0_;
+        return v01.cross(v03).normalize();
+    }
+
+public:
+    FUNC_DECL
+    Square(void)
+        : Primitive(), v0_(), v1_(), v2_(), v3_() {}
+
+    FUNC_DECL
+    Square(const Material & material,
+             const Coord & v0,
+             const Coord & v1, 
+             const Coord & v2,
+             const Coord & v3)
+           : Primitive(material), v0_(v0), v1_(v1), v2_(v2), v3_(v3)
+    {
+        center_ = calc_center();
+        normal_ = calc_normal();
+    }
+    
+    FUNC_DECL 
+    virtual Intersect intersect(const Ray& ray) const
+    {
+        float nume = (v0_ - ray.origin).dot(normal_);
+        float deno = ray.direction.dot(normal_);
+
+        if (-0.0001f <= deno)
+        {
+            return Intersect();
+        }
+        
+        float t = nume / deno;
+
+        if (t < 0)
+        {
+            return Intersect();
+        }
+        
+        Coord p = ray.origin + ray.direction * t;
+        
+        Vector d0p = p - v0_;
+        Vector d01 = v1_ - v0_;
+        if (d01.cross(d0p).dot(normal_) < 0)
+        {
+            return Intersect();
+        }
+        
+        Vector d1p = p - v1_;
+        Vector d12 = v2_ - v1_;
+        if (d12.cross(d1p).dot(normal_) < 0)
+        {
+            return Intersect();
+        }
+
+        Vector d2p = p - v2_;
+        Vector d23 = v3_ - v2_;
+        if (d23.cross(d2p).dot(normal_) < 0)
+        {
+            return Intersect();
+        }
+
+        Vector d3p = p - v3_;
+        Vector d30 = v0_ - v3_;
+        if (d30.cross(d3p).dot(normal_) < 0)
+        {
+            return Intersect();
+        }
+        
+        float reflet = 2.0f * (ray.direction.dot(normal_));
+        Ray new_ray(p, ray.direction - (normal_ * reflet), ray.strong * material_.reflection);
+        
+        return Intersect(this, ray.strong, t, p, normal_, new_ray);
+    }
+ 
+    FUNC_DECL 
+    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num,
+                           const Intersect & isect) const
+    {
         if (0.0f < material_.luminescence)
         {
-            return material_.color * material_.luminescence * isect.reflection;
+            float luminescence = 0.0f;
+            const Coord v[9] = {v0_, v1_, v2_, v3_, (v0_+v1_)/2.0f, (v1_+v2_)/2.0f, (v2_+v3_)/2.0f, (v3_+v0_)/2.0f, center_};
+
+            for (unsigned int i=0; i<9; ++i)
+            {
+                Ray ray(v[i], isect.coord - v[i], 1.0f);
+
+                bool reachable = true;
+                Intersect my_isect = isect.primitive->intersect(ray);
+
+                for (unsigned int j=0; j<primitive_num; ++j)
+                {
+                    const Primitive * primitive = primitives[j];
+
+                    if (this == primitive || NULL == primitive)
+                    {
+                        continue;
+                    }
+
+                    Intersect other_isect = primitive->intersect(ray);
+
+                    if (NULL != other_isect.primitive && 
+                        other_isect.distance < my_isect.distance)
+                    {
+                        reachable = false;
+                        break;
+                    }
+                }
+
+                if (reachable)
+                {
+                    luminescence += material_.luminescence;
+                }
+            }
+            
+            luminescence /= 9.0f;
+            
+            return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
         }
         else
         {
-            RGBA pixel;
-
-            for (unsigned int i=0; i<primitive_num; ++i)
-            {
-                if (NULL == primitives[i])
-                {
-                    continue;
-                }
-                
-                Light light = primitives[i]->lighting(primitives, primitive_num, isect);
-
-                if (0 == light.ray.strong)
-                {
-                    continue;
-                }
-
-                float lambert = fabs(light.ray.direction.dot(isect.normal));
-                pixel = pixel.add_sat(material_.color * lambert * isect.reflection);
-            }
-
-            return pixel;
+            return Light();
         }
     }
 
@@ -366,6 +521,7 @@ public:
         v0_ = v0_ + displacement;
         v1_ = v1_ + displacement;
         v2_ = v2_ + displacement;
+        v3_ = v3_ + displacement;
         center_ = calc_center();
         normal_ = calc_normal();
     }
@@ -491,7 +647,7 @@ public:
                 }
 
                 float lambert = fabs(light.ray.direction.dot(isect.normal));
-                pixel = pixel.add_sat(material_.color * lambert * isect.reflection);
+                pixel = pixel.add_sat(material_.color * lambert * isect.reflection * light.ray.strong);
             }
             
             return pixel;
@@ -517,7 +673,7 @@ private:
     float screen_width_;
     float screen_height_;
    
-    Primitive * primitives_[OBJECT_NUM];
+    Primitive * primitives_[PRIMITIVE_NUM];
    
 public:
     
@@ -526,112 +682,82 @@ public:
         : width_(width), height_(height), 
           view_point_(0, 0, 1.0)
     {
-        screen_ = Coord(-1.0, -1.0, 0.0);
+        screen_ = Coord(-1.0, +1.0, 0.0);
         screen_width_ = 2.0;
         screen_height_ = 2.0;
                 
         primitives_[0] = new BackGround();
 #if 1
-        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5f, 0.0f), 
-                              Coord(-0.7f, -0.6f, -3.0f), 0.7f);
+        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.2f, 0.0f), 
+                              Coord(-0.7f, -3.0f, -3.0f), 1.0f);
 
         primitives_[2] = new Sphere(Material(RGBA(0, 255, 255), 0.2f, 0.0f), 
-                              Coord(+0.7f, -0.6f, -3.0f), 0.7f);
+                              Coord(+0.7f, -2.0f, -6.0f), 2.0f);
         
         primitives_[3] = new Sphere(Material(RGBA(255, 255, 255), 1.0f, 0.0f), 
-                              Coord(+0.0f, +0.6f, -3.0f), 0.7f);
+                              Coord(-2.0f, -1.0f, -3.0f), 0.6f);
 
         /* Floor */
-        primitives_[4] = new Triangle(Material(RGBA(128, 128, 128), 0.2f, 0.0f),
-                                Coord(-4.0f, -4.0f, +8.0f), 
-                                Coord(-4.0f, -4.0f, -8.0f),
-                                Coord(+4.0f, -4.0f, +8.0f));
-
-        primitives_[5] = new Triangle(Material(RGBA(128, 128, 128), 0.2f, 0.0f),
-                                Coord(-4.0f, -4.0f, -8.0f), 
-                                Coord(+4.0f, -4.0f, -8.0f),
-                                Coord(+4.0f, -4.0f, +8.0f));
+        primitives_[4] = new Square(Material(RGBA(128, 128, 128), 0.2f, 0.0f),
+                                Coord(-4.0f, -4.0f, +8.0f),
+                                Coord(+4.0f, -4.0f, +8.0f),
+                                Coord(+4.0f, -4.0f, -8.0f), 
+                                Coord(-4.0f, -4.0f, -8.0f));
 
         /* Loof */
-        primitives_[6] = new Triangle(Material(RGBA(64, 64, 64), 0.2f, 0.0f),
-                                Coord(-4.0f, +4.0f, -8.0f), 
+        primitives_[5] = new Square(Material(RGBA(64, 64, 64), 0.2f, 0.0f),
                                 Coord(-4.0f, +4.0f, +8.0f),
-                                Coord(+4.0f, +4.0f, +8.0f));
-
-        primitives_[7] = new Triangle(Material(RGBA(64, 64, 64), 0.2f, 0.0f),
-                                Coord(+4.0f, +4.0f, +8.0f), 
-                                Coord(+4.0f, +4.0f, -8.0f),
-                                Coord(-4.0f, +4.0f, +8.0f));
+                                Coord(+4.0f, +4.0f, +8.0f),
+                                Coord(+4.0f, +4.0f, -8.0f), 
+                                Coord(-4.0f, +4.0f, -8.0f));
  
         /* Front Wall */
-        primitives_[8] = new Triangle(Material(RGBA(255, 255, 255), 0.2f, 0.0f),
-                                Coord(-4.0f, -4.0f, -8.0f), 
-                                Coord(-4.0f, +4.0f, -8.0f),
-                                Coord(+4.0f, -4.0f, -8.0f));
-
-        primitives_[9] = new Triangle(Material(RGBA(255, 255, 255), 0.2f, 0.0f),
-                                Coord(+4.0f, +4.0f, -8.0f), 
+        primitives_[6] = new Square(Material(RGBA(255, 255, 255), 0.2f, 0.0f),
+                                Coord(-4.0f, -4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, -8.0f),
+                                Coord(+4.0f, +4.0f, -8.0f), 
                                 Coord(-4.0f, +4.0f, -8.0f));
 
         /* Left Wall */
-        primitives_[10] = new Triangle(Material(RGBA(255, 0, 0), 0.2f, 0.0f),
-                                 Coord(-4.0f, -4.0f, +8.0f), 
-                                 Coord(-4.0f, +4.0f, +8.0f),
-                                 Coord(-4.0f, -4.0f, -8.0f));
-
-        primitives_[11] = new Triangle(Material(RGBA(255, 0, 0), 0.2f, 0.0f),
-                                 Coord(-4.0f, +4.0f, -8.0f), 
+        primitives_[7] = new Square(Material(RGBA(255, 0, 0), 0.2f, 0.0f),
+                                 Coord(-4.0f, -4.0f, +8.0f),
                                  Coord(-4.0f, -4.0f, -8.0f),
+                                 Coord(-4.0f, +4.0f, -8.0f), 
                                  Coord(-4.0f, +4.0f, +8.0f));
         
         /* Right Wall */
-        primitives_[12] = new Triangle(Material(RGBA(0, 255, 0), 0.2f, 0.0f),
+        primitives_[8] = new Square(Material(RGBA(0, 255, 0), 0.2f, 0.0f),
                                 Coord(+4.0f, -4.0f, -8.0f), 
-                                Coord(+4.0f, +4.0f, -8.0f),
-                                Coord(+4.0f, -4.0f, +8.0f));
-
-        primitives_[13] = new Triangle(Material(RGBA(0, 255, 0), 0.2f, 0.0f),
-                                Coord(+4.0f, +4.0f, +8.0f), 
                                 Coord(+4.0f, -4.0f, +8.0f),
+                                Coord(+4.0f, +4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, -8.0f));
-
+        
         /* Loof light */
-        //primitives_[14] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.5f),
-        //                        Coord(-1.0f, +3.99f, -5.0f),
-        //                        Coord(-1.0f, +3.99f, -4.0f), 
-        //                        Coord(+1.0f, +3.99f, -4.0f));
+        primitives_[9] = new Square(Material(RGBA(255, 255, 255), 0.0f, 1.0f),
+                                Coord(-0.5f, +3.99f, -4.75f),
+                                Coord(+0.5f, +3.99f, -4.75f),
+                                Coord(+0.5f, +3.99f, -4.25f), 
+                                Coord(-0.5f, +3.99f, -4.25f));
 
-        //primitives_[15] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.5f),
-        //                        Coord(+1.0f, +3.99f, -5.0f),
-        //                        Coord(-1.0f, +3.99f, -5.0f), 
-        //                        Coord(+1.0f, +3.99f, -4.0f));
-
-        primitives_[14] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
-                              Coord(0.0f, +2.0f, +2.0f), 0.1f);
-        primitives_[15] = NULL;
-        //primitives_[15] = NULL;
-
+        //primitives_[9] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
+        //                      Coord(0.0f, +2.0f, +2.0f), 0.1f);
 
 #elif 0
-        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.1f), 
-                                Coord(-20.0, -20.0, -1.0),
-                                Coord(+20.0, -20.0, -1.0),
-                                Coord(+20.0, +20.0, -1.0));
-        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.1f), 
-                                Coord(-20.0, -20.0, -1.0),
-                                Coord(-20.0, +20.0, -1.0),
-                                Coord(+20.0, +20.0, -1.0));
-        primitives_[3] = NULL;
-        primitives_[4] = NULL;
-        primitives_[5] = NULL;
+        primitives_[1] = new Square(Material(RGBA(255, 255, 255), 1.0f, 0.0f), 
+                                Coord(-2.0, -2.0, -1.0),
+                                Coord(+2.0, -2.0, -1.0),
+                                Coord(+2.0, +2.0, -1.0),
+                                Coord(-2.0, +2.0, -1.0));
+
+        primitives_[2] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
+                              Coord(0.0f, +2.0f, +2.0f), 0.1f);
 #else
         primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5, 0.0f), 
                               Coord(0.0, 0.0, -3.0), 1.0);
-        primitives_[2] = NULL;
-        primitives_[3] = NULL;
-        primitives_[4] = NULL;
-        primitives_[5] = NULL;
+        //primitives_[2] = NULL;
+        //primitives_[3] = NULL;
+        //primitives_[4] = NULL;
+        //primitives_[5] = NULL;
 #endif
     
     }
@@ -639,7 +765,7 @@ public:
     FUNC_DECL
     ~Scene()
     {
-        for (int i=0; i<OBJECT_NUM; ++i)
+        for (int i=0; i<PRIMITIVE_NUM; ++i)
         {
             delete primitives_[i];
         }
@@ -654,8 +780,8 @@ public:
         /* debug */
 
         Coord screen_coord = screen_+
-            Coord(screen_width_*static_cast<float>(x)/static_cast<float>(width_),
-                  screen_height_*static_cast<float>(y)/static_cast<float>(height_),
+            Coord( screen_width_ *static_cast<float>(x)/static_cast<float>(width_),
+                  -screen_height_*static_cast<float>(y)/static_cast<float>(height_),
                   0.0);
 
         Vector direction = screen_coord - view_point_;
@@ -665,10 +791,10 @@ public:
         RGBA8U pixel;
        
         unsigned int reflect_count = 0;
-
+        
         do
         {
-            for (unsigned int i=0; i<OBJECT_NUM; ++i)
+            for (unsigned int i=0; i<PRIMITIVE_NUM; ++i)
             {
                 Intersect isect;
 
@@ -705,7 +831,7 @@ public:
         {
             if (NULL != isects[i].primitive)
             {
-                pixel = pixel.add_sat(isects[i].primitive->shading( &primitives_[0], OBJECT_NUM, isects[i]));
+                pixel = pixel.add_sat(isects[i].primitive->shading(primitives_, PRIMITIVE_NUM, isects[i]));
             }
         }
        
@@ -721,7 +847,7 @@ public:
     FUNC_DECL
     void displace_primitive(const Vector& displacement)
     {
-        primitives_[14]->displace(displacement);
+        primitives_[9]->displace(displacement);
     }
 
 };
