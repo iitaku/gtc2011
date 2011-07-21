@@ -290,7 +290,7 @@ public:
                 Ray ray(v[i], isect.coord - v[i], 1.0f);
 
                 bool reachable = true;
-                Intersect my_isect = isect.primitive->intersect(ray);
+                float my_isect_distance = isect.primitive->intersect(ray).distance;
 
                 for (unsigned int j=0; j<primitive_num; ++j)
                 {
@@ -304,7 +304,7 @@ public:
                     Intersect other_isect = primitive->intersect(ray);
 
                     if (NULL != other_isect.primitive && 
-                        other_isect.distance < my_isect.distance)
+                        other_isect.distance < my_isect_distance)
                     {
                         reachable = false;
                         break;
@@ -431,7 +431,7 @@ public:
             Ray ray(center_, isect.coord - center_, 1.0);
 
             bool reachable = true;
-            Intersect my_isect = isect.primitive->intersect(ray);
+            float my_isect_distance = isect.primitive->intersect(ray).distance;
 
             for (unsigned int j=0; j<primitive_num; ++j)
             {
@@ -445,7 +445,7 @@ public:
                 Intersect other_isect = primitive->intersect(ray);
 
                 if (NULL != other_isect.primitive && 
-                        other_isect.distance < my_isect.distance)
+                        other_isect.distance < my_isect_distance)
                 {
                     reachable = false;
                     break;
