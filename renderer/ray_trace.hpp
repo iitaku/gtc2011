@@ -694,12 +694,10 @@ public:
                                 Coord(+4.0f, +4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, -8.0f));
         
-        /* Loof light */
-        primitives_[9] = new Square(Material(RGBA(255, 255, 255), 0.0f, 25.0f),
-                                Coord(-0.5f, +3.99f, -4.75f),
-                                Coord(+0.5f, +3.99f, -4.75f),
-                                Coord(+0.5f, +3.99f, -4.25f), 
-                                Coord(-0.5f, +3.99f, -4.25f));
+        /* Ball light */
+        primitives_[9] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 25.0f), 
+                              Coord(0.0f, +2.0f, +2.0f), 0.1f);
+
     
     }
 
