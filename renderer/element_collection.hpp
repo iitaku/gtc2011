@@ -161,7 +161,16 @@ namespace gtc
                                        helper::add_sat<T>(this->v2_, rhs.v2_),
                                        helper::add_sat<T>(this->v3_, rhs.v3_));
             }
-            
+  
+            /* saturating mul */
+            FUNC_DECL
+            ThreeElement<T> mul_sat(float s) const
+            {
+                return ThreeElement<T>(helper::mul_sat<T>(this->v1_, s),
+                                       helper::mul_sat<T>(this->v2_, s),
+                                       helper::mul_sat<T>(this->v3_, s));
+            }
+
             /* dot product */
             FUNC_DECL
             float dot(const ThreeElement<T>& rhs) const
@@ -363,7 +372,7 @@ namespace gtc
                                       static_cast<T>(static_cast<S>(this->v3_)/s),
                                       static_cast<T>(static_cast<S>(this->v4_)/s));
             }
- 
+   
             /* saturating add */
             FUNC_DECL
             FourElement<T> add_sat(const FourElement<T>& rhs) const
@@ -372,6 +381,16 @@ namespace gtc
                                       helper::add_sat<T>(this->v2_, rhs.v2_),
                                       helper::add_sat<T>(this->v3_, rhs.v3_),
                                       helper::add_sat<T>(this->v4_, rhs.v4_));
+            }
+
+            /* saturating mul */
+            FUNC_DECL
+            FourElement<T> mul_sat(float s) const
+            {
+                return FourElement<T>(helper::mul_sat<T>(this->v1_, s),
+                                      helper::mul_sat<T>(this->v2_, s),
+                                      helper::mul_sat<T>(this->v3_, s),
+                                      helper::mul_sat<T>(this->v4_, s));
             }
 
             /* dot product */

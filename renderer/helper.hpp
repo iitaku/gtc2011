@@ -241,6 +241,25 @@ namespace gtc
             return AddSat<typename TypeClass<T>::SignType>::op(val1, val2);
         }
 
+        template<typename T>
+        FUNC_DECL
+        T mul_sat(T val1, float val2)
+        {
+            float result = static_cast<float>(val1) * val2;
+            T ret;
+
+            if (static_cast<float>(make_max<T>()) < result)
+            {
+                ret = make_max<T>();
+            }
+            else
+            {
+                ret = static_cast<T>(result);
+            }
+            
+            return ret;
+        }
+
     } /* namespace helper */
 
 } /* namespace gtc */

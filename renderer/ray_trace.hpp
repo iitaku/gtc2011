@@ -175,7 +175,8 @@ public:
                 }
 
                 float lambert = fabs(light.ray.direction.dot(isect.normal));
-                pixel = pixel.add_sat(material_.color * lambert * isect.reflection * light.ray.strong);
+                RGBA add_color = material_.color * lambert * isect.reflection;
+                pixel = pixel.add_sat(add_color.mul_sat(light.ray.strong));
             }
 
             return pixel;
@@ -347,7 +348,7 @@ public:
                 }
             }
             
-            luminescence /= 3.0f;
+            luminescence /= (3.0f*(isect.coord - center_).self_dot());
             
             return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
         }
@@ -505,8 +506,8 @@ public:
                 }
             }
             
-            luminescence /= 9.0f;
-            
+            luminescence /= (9.0f*(isect.coord - center_).self_dot());
+                       
             return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
         }
         else
@@ -613,6 +614,8 @@ public:
                 luminescence += material_.luminescence;
             }
 
+            luminescence /= (isect.coord - center_).self_dot();
+            
             return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
         }
         else
@@ -620,40 +623,7 @@ public:
             return Light();
         }
     }
-
-    FUNC_DECL 
-    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const
-    {
-        if (0.0f < material_.luminescence)
-        {
-            return material_.color * material_.luminescence * isect.reflection;
-        }
-        else
-        {
-            RGBA pixel;
-
-            for (unsigned int i=0; i<primitive_num; ++i)
-            {
-                if (NULL == primitives[i])
-                {
-                    continue;
-                }
-                
-                Light light = primitives[i]->lighting(primitives, primitive_num, isect);
-
-                if (0 == light.ray.strong)
-                {
-                    continue;
-                }
-
-                float lambert = fabs(light.ray.direction.dot(isect.normal));
-                pixel = pixel.add_sat(material_.color * lambert * isect.reflection * light.ray.strong);
-            }
-            
-            return pixel;
-        }
-    }
-
+    
     FUNC_DECL 
     virtual void displace(const Vector& displacement)
     {
@@ -733,7 +703,7 @@ public:
                                 Coord(+4.0f, +4.0f, -8.0f));
         
         /* Loof light */
-        primitives_[9] = new Square(Material(RGBA(255, 255, 255), 0.0f, 1.0f),
+        primitives_[9] = new Square(Material(RGBA(255, 255, 255), 0.0f, 25.0f),
                                 Coord(-0.5f, +3.99f, -4.75f),
                                 Coord(+0.5f, +3.99f, -4.75f),
                                 Coord(+0.5f, +3.99f, -4.25f), 
