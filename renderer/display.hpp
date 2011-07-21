@@ -21,7 +21,8 @@
 	if (cudaSuccess != err) {                 \
         std::cerr << __FILE__ << ":"          \
                   << __LINE__ << ":"          \
-                  << cudaGetErrorString(err); \
+                  << cudaGetErrorString(err)  \
+                  << std::endl;               \
     }                                         \
 	assert(cudaSuccess == err);               \
 }
@@ -41,7 +42,7 @@ namespace gtc
                 F::display();
                                
                 perf.stop();
-                               
+                                              
                 double fps = 1e3f / perf.mean_ms();
                 std::stringstream ss;
                 ss << "Real Time Raytracing : "
@@ -114,9 +115,9 @@ namespace gtc
     }
 
     __global__
-    static void displace_light_kernel(Scene ** d_scene_p, float v1, float v2, float v3)
+    static void displace_primitive_kernel(Scene ** d_scene_p, float v1, float v2, float v3)
     {
-        (*d_scene_p)->displace_light(Vector(v1, v2, v3));
+        (*d_scene_p)->displace_primitive(Vector(v1, v2, v3));
     }
 
 #endif
@@ -188,6 +189,8 @@ namespace gtc
             
             render_kernel<<<grid_size, block_size>>>(d_scene_p_, d_image_, width_, height_);
 
+            CUDA_ERROR_CHECK();
+
             cudaMemcpy(image_, d_image_, width_*height_*sizeof(RGBA8U), cudaMemcpyDeviceToHost);
 #else
             
@@ -225,21 +228,21 @@ namespace gtc
 
         static void keyboard(unsigned char key, int x, int y)
         {
-            Vector displace;
+            Vector displacement;
             
             switch(key)
             {
                 case 'h':
-                    displace = Vector(-0.1, 0.0, 0.0);
+                    displacement = Vector(-0.1, 0.0, 0.0);
                     break;
                 case 'j':
-                    displace = Vector(0.0, 0.0, -0.1);
+                    displacement = Vector(0.0, 0.0, -0.1);
                     break;
                 case 'k':
-                    displace = Vector(0.0, 0.0, +0.1);
+                    displacement = Vector(0.0, 0.0, +0.1);
                     break;
                 case 'l':
-                    displace = Vector(+0.1, 0.0, 0.0);
+                    displacement = Vector(+0.1, 0.0, 0.0);
                     break;
                 case 'L':
                     std::cout << x << ":" << y << std::endl;
@@ -253,11 +256,11 @@ namespace gtc
                     break;
             }
 #ifdef USE_CUDA
-            //displace_view_kernel<<<1, 1>>>(d_scene_p_, displace.V1(), displace.V2(), displace.V3());
-            displace_light_kernel<<<1, 1>>>(d_scene_p_, displace.V1(), displace.V2(), displace.V3());
+            //displace_view_kernel<<<1, 1>>>(d_scene_p_, displacement.V1(), displacement.V2(), displacement.V3());
+            displace_primitive_kernel<<<1, 1>>>(d_scene_p_, displacement.V1(), displacement.V2(), displacement.V3());
 #else
             //scene_->displace_view(displace);
-            scene_->displace_light(displace);
+            scene_->displace_primitive(displacement);
 #endif
         }
     };

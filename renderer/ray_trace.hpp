@@ -7,7 +7,6 @@
 
 #define LIGHT_NUM (1)
 #define OBJECT_NUM (1+15)
-//#define OBJECT_NUM (1+5)
 #define REFLECT_NUM (5)
 
 namespace gtc
@@ -17,6 +16,14 @@ typedef RGBA8U RGBA;
 class Primitive;
 
 static int frame_count = 0;
+
+#if USE_CUDA
+__device__ int deb_x;
+__device__ int deb_y;
+#else
+int deb_x;
+int deb_y;
+#endif
 
 struct Material
 {
@@ -139,14 +146,15 @@ public:
      
     /* calculate lighting toward intersect coord */
     FUNC_DECL 
-    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num,
-                           const Intersect & isect) const = 0;
+    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const = 0;
 
     /* calculate shading at intersect coord */
     FUNC_DECL 
-    virtual RGBA shading(Coord * lights, unsigned int light_num,
-                          Primitive ** primitives, unsigned int primitive_num,
-                          const Intersect & isect) const = 0;
+    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const = 0;
+
+    /* displace coord */
+    FUNC_DECL 
+    virtual void displace(const Vector& displacement) = 0;
 };
 
 class BackGround : public Primitive
@@ -170,11 +178,14 @@ public:
     }
     
     FUNC_DECL 
-    virtual RGBA shading(Coord * lights, unsigned int light_num,
-                          Primitive ** primitives, unsigned int primitive_num,
-                          const Intersect & isect) const
+    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const
     {
         return invisible_color_;
+    }
+
+    FUNC_DECL 
+    virtual void displace(const Vector& coord)
+    {
     }
 };
 
@@ -187,6 +198,12 @@ private:
 
     Coord center_;
     Vector normal_;
+    
+    FUNC_DECL
+    Vector calc_center()
+    {
+        return (v0_ + v1_ + v2_) / 3.0f;
+    }
 
     FUNC_DECL
     Vector calc_normal()
@@ -208,7 +225,7 @@ public:
              const Coord & v2)
            : Primitive(material), v0_(v0), v1_(v1), v2_(v2)
     {
-        center_ = (v0_ + v1_ + v2) / 3.0f;
+        center_ = calc_center();
         normal_ = calc_normal();
     }
     
@@ -272,6 +289,7 @@ public:
             {
                 Ray ray(v[i], isect.coord - v[i], 1.0f);
 
+                bool reachable = true;
                 Intersect my_isect = isect.primitive->intersect(ray);
 
                 for (unsigned int j=0; j<primitive_num; ++j)
@@ -288,13 +306,14 @@ public:
                     if (NULL != other_isect.primitive && 
                         other_isect.distance < my_isect.distance)
                     {
+                        reachable = false;
                         break;
                     }
+                }
 
-                    if (primitive_num-1 == j)
-                    {
-                        luminescence += material_.luminescence;
-                    }
+                if (reachable)
+                {
+                    luminescence += material_.luminescence;
                 }
             }
             
@@ -309,9 +328,7 @@ public:
     }
 
     FUNC_DECL 
-    virtual RGBA shading(Coord * lights, unsigned int light_num,
-                         Primitive ** primitives, unsigned int primitive_num,
-                         const Intersect & isect) const
+    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const
     { 
         if (0.0f < material_.luminescence)
         {
@@ -319,45 +336,38 @@ public:
         }
         else
         {
-            RGBA pixel = material_.color;
-            for (unsigned int i=0; i<light_num; ++i)
+            RGBA pixel;
+
+            for (unsigned int i=0; i<primitive_num; ++i)
             {
-                const Coord & light = lights[i];
-
-                if (isect.normal.dot(light-isect.coord) <= 0.0f)
+                if (NULL == primitives[i])
                 {
-                    return Primitive::invisible_color_;
+                    continue;
+                }
+                
+                Light light = primitives[i]->lighting(primitives, primitive_num, isect);
+
+                if (0 == light.ray.strong)
+                {
+                    continue;
                 }
 
-                Ray ray(light, isect.coord - light, 1.0);
-
-                Intersect my_isect = this->intersect(ray);
-
-                for (unsigned int j=0; j<primitive_num; ++j)
-                {
-                    Intersect other_isect;
-                    const Primitive * primitive = primitives[j];
-
-                    if (this == primitive || NULL == primitive)
-                    {
-                        continue;
-                    }
-
-                    other_isect = primitive->intersect(ray);
-
-                    if (NULL != other_isect.primitive && 
-                            other_isect.distance < my_isect.distance)
-                    {
-                        return Primitive::invisible_color_;
-                    }
-                }
-
-                float lambert = fabs(ray.direction.dot(isect.normal));
-                pixel = material_.color * lambert * isect.reflection;
+                float lambert = fabs(light.ray.direction.dot(isect.normal));
+                pixel = pixel.add_sat(material_.color * lambert * isect.reflection);
             }
 
             return pixel;
         }
+    }
+
+    FUNC_DECL 
+    virtual void displace(const Vector& displacement)
+    {
+        v0_ = v0_ + displacement;
+        v1_ = v1_ + displacement;
+        v2_ = v2_ + displacement;
+        center_ = calc_center();
+        normal_ = calc_normal();
     }
 };
 
@@ -420,6 +430,7 @@ public:
 
             Ray ray(center_, isect.coord - center_, 1.0);
 
+            bool reachable = true;
             Intersect my_isect = isect.primitive->intersect(ray);
 
             for (unsigned int j=0; j<primitive_num; ++j)
@@ -436,15 +447,16 @@ public:
                 if (NULL != other_isect.primitive && 
                         other_isect.distance < my_isect.distance)
                 {
+                    reachable = false;
                     break;
                 }
-
-                if (primitive_num-1 == j)
-                {
-                    luminescence += material_.luminescence;
-                }
             }
-            
+
+            if (reachable)
+            {
+                luminescence += material_.luminescence;
+            }
+
             return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
         }
         else
@@ -454,9 +466,7 @@ public:
     }
 
     FUNC_DECL 
-    virtual RGBA shading(Coord * lights, unsigned int light_num,
-                         Primitive ** primitives, unsigned int primitive_num,
-                         const Intersect & isect) const
+    virtual RGBA shading(Primitive ** primitives, unsigned int primitive_num, const Intersect & isect) const
     {
         if (0.0f < material_.luminescence)
         {
@@ -464,47 +474,36 @@ public:
         }
         else
         {
-            RGBA pixel = material_.color;
+            RGBA pixel;
 
-            for (unsigned int i=0; i<light_num; ++i)
+            for (unsigned int i=0; i<primitive_num; ++i)
             {
-                const Coord & light = lights[i];
-
-                if (isect.normal.dot(light-isect.coord) <= 0.0f)
+                if (NULL == primitives[i])
                 {
-                    return Primitive::invisible_color_;
+                    continue;
+                }
+                
+                Light light = primitives[i]->lighting(primitives, primitive_num, isect);
+
+                if (0 == light.ray.strong)
+                {
+                    continue;
                 }
 
-                Ray ray(light, isect.coord - light, 1.0);
-
-                Intersect my_isect = this->intersect(ray);
-
-                for (unsigned int j=0; j<primitive_num; ++j)
-                {
-                    Intersect other_isect;
-                    const Primitive * primitive = primitives[j];
-
-                    if (NULL == primitive)
-                    {
-                        continue;
-                    }
-
-                    other_isect = primitive->intersect(ray);
-
-                    if (NULL != other_isect.primitive && 
-                            other_isect.distance < my_isect.distance)
-                    {
-                        return Primitive::invisible_color_;
-                    }
-                }
-
-                float lambert = fabs(ray.direction.dot(isect.normal));
-                pixel = material_.color * lambert * isect.reflection;
+                float lambert = fabs(light.ray.direction.dot(isect.normal));
+                pixel = pixel.add_sat(material_.color * lambert * isect.reflection);
             }
-
+            
             return pixel;
         }
     }
+
+    FUNC_DECL 
+    virtual void displace(const Vector& displacement)
+    {
+        center_ = center_ + displacement;
+    }
+
 };
 
 class Scene
@@ -517,9 +516,7 @@ private:
     Coord screen_;
     float screen_width_;
     float screen_height_;
-    
-    Coord lights_[LIGHT_NUM];
-
+   
     Primitive * primitives_[OBJECT_NUM];
    
 public:
@@ -533,8 +530,6 @@ public:
         screen_width_ = 2.0;
         screen_height_ = 2.0;
                 
-        lights_[0] = Coord(0.0, 5.0, 1.0);
-        
         primitives_[0] = new BackGround();
 #if 1
         primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5f, 0.0f), 
@@ -601,24 +596,29 @@ public:
                                 Coord(+4.0f, -4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, -8.0f));
 
-        /* Floor light */
-        primitives_[14] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f),
-                                Coord(-1.0f, +3.99f, -5.0f),
-                                Coord(-1.0f, +3.99f, -4.0f), 
-                                Coord(+1.0f, +3.99f, -4.0f));
+        /* Loof light */
+        //primitives_[14] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.5f),
+        //                        Coord(-1.0f, +3.99f, -5.0f),
+        //                        Coord(-1.0f, +3.99f, -4.0f), 
+        //                        Coord(+1.0f, +3.99f, -4.0f));
 
-        primitives_[15] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f),
-                                Coord(+1.0f, +3.99f, -5.0f),
-                                Coord(-1.0f, +3.99f, -5.0f), 
-                                Coord(+1.0f, +3.99f, -4.0f));
+        //primitives_[15] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.5f),
+        //                        Coord(+1.0f, +3.99f, -5.0f),
+        //                        Coord(-1.0f, +3.99f, -5.0f), 
+        //                        Coord(+1.0f, +3.99f, -4.0f));
+
+        primitives_[14] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
+                              Coord(0.0f, +2.0f, +2.0f), 0.1f);
+        primitives_[15] = NULL;
+        //primitives_[15] = NULL;
 
 
 #elif 0
-        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
+        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.1f), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(+20.0, -20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
-        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
+        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 0.0f, 0.1f), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(-20.0, +20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
@@ -648,6 +648,10 @@ public:
     FUNC_DECL
     RGBA8U render(int x, int y)
     {
+        /* debug */
+        deb_x = x;
+        deb_y = x;
+        /* debug */
 
         Coord screen_coord = screen_+
             Coord(screen_width_*static_cast<float>(x)/static_cast<float>(width_),
@@ -696,17 +700,12 @@ public:
         } while (NULL != isects[reflect_count-1].primitive && 
                  0.0f < isects[reflect_count-1].reflection &&
                  reflect_count < REFLECT_NUM);
-       
         
         for (unsigned int i=0; i<reflect_count; ++i)
         {
             if (NULL != isects[i].primitive)
             {
-                pixel = pixel.add_sat(isects[i].primitive->shading(&lights_[0], 
-                                                           LIGHT_NUM, 
-                                                           &primitives_[0], 
-                                                           OBJECT_NUM, 
-                                                           isects[i]));
+                pixel = pixel.add_sat(isects[i].primitive->shading( &primitives_[0], OBJECT_NUM, isects[i]));
             }
         }
        
@@ -720,9 +719,9 @@ public:
     }
 
     FUNC_DECL
-    void displace_light(const Vector& displacement)
+    void displace_primitive(const Vector& displacement)
     {
-        lights_[0] = lights_[0] + displacement;
+        primitives_[14]->displace(displacement);
     }
 
 };
