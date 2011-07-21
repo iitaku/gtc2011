@@ -657,7 +657,7 @@ public:
         screen_height_ = 2.0;
                 
         primitives_[0] = new BackGround();
-#if 1
+
         primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.2f, 0.0f), 
                               Coord(-0.7f, -3.0f, -3.0f), 1.0f);
 
@@ -703,32 +703,9 @@ public:
                                 Coord(+4.0f, +4.0f, -8.0f));
         
         /* Loof light */
-        primitives_[9] = new Square(Material(RGBA(255, 255, 255), 0.0f, 25.0f),
-                                Coord(-0.5f, +3.99f, -4.75f),
-                                Coord(+0.5f, +3.99f, -4.75f),
-                                Coord(+0.5f, +3.99f, -4.25f), 
-                                Coord(-0.5f, +3.99f, -4.25f));
+        primitives_[9] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 25.0f), 
+                              Coord(0.0f, +2.0f, +1.0f), 0.1f);
 
-        //primitives_[9] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
-        //                      Coord(0.0f, +2.0f, +2.0f), 0.1f);
-
-#elif 0
-        primitives_[1] = new Square(Material(RGBA(255, 255, 255), 1.0f, 0.0f), 
-                                Coord(-2.0, -2.0, -1.0),
-                                Coord(+2.0, -2.0, -1.0),
-                                Coord(+2.0, +2.0, -1.0),
-                                Coord(-2.0, +2.0, -1.0));
-
-        primitives_[2] = new Sphere(Material(RGBA(255, 255, 255), 0.0f, 1.0f), 
-                              Coord(0.0f, +2.0f, +2.0f), 0.1f);
-#else
-        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5, 0.0f), 
-                              Coord(0.0, 0.0, -3.0), 1.0);
-        //primitives_[2] = NULL;
-        //primitives_[3] = NULL;
-        //primitives_[4] = NULL;
-        //primitives_[5] = NULL;
-#endif
     
     }
 
