@@ -36,18 +36,11 @@ namespace gtc
             
             static void display_callback(void)
             {
-                Performance perf("all");
-                
                 F::compute();
                 F::display();
-                               
-                perf.stop();
                                               
-                double fps = 1e3f / perf.mean_ms();
                 std::stringstream ss;
-                ss << "Real Time Raytracing : "
-                   << std::setw(5) << std::left << std::setprecision(4) 
-                   << fps << " fps";
+                ss << "Real Time Raytracing";
 
                 glutSetWindowTitle(ss.str().c_str());
 
@@ -86,42 +79,6 @@ namespace gtc
 
     };
 
-#ifdef USE_CUDA
-    __global__
-    static void new_kernel(Scene ** d_scene_p, int width, int height)
-    {
-        (*d_scene_p) = new Scene(width, height);
-    }
-
-    __global__
-    static void delete_kernel(Scene ** d_scene_p)
-    {
-        delete (*d_scene_p);
-    }
-
-    __global__
-    static void render_kernel(Scene ** d_scene_p, RGBA8U * d_image, int width, int height)
-    {
-        int x = blockDim.x * blockIdx.x + threadIdx.x;
-        int y = blockDim.y * blockIdx.y + threadIdx.y;
-
-        d_image[y*width+x] = (*d_scene_p)->render(x, y);
-    }
-
-    __global__
-    static void displace_view_kernel(Scene ** d_scene_p, float v1, float v2, float v3)
-    {
-        (*d_scene_p)->displace_view(Vector(v1, v2, v3));
-    }
-
-    __global__
-    static void displace_primitive_kernel(Scene ** d_scene_p, float v1, float v2, float v3)
-    {
-        (*d_scene_p)->displace_primitive(Vector(v1, v2, v3));
-    }
-
-#endif
-
     struct DrawImage
     {
         static int width_;
@@ -130,11 +87,6 @@ namespace gtc
         static GLuint texture_;
         static RGBA8U * image_;
         static Scene * scene_;
-
-#ifdef USE_CUDA
-        static RGBA8U * d_image_;
-        static Scene ** d_scene_p_;
-#endif
 
         static void init(int width, int height)
         {
@@ -145,14 +97,6 @@ namespace gtc
             
             image_ = new RGBA8U[width_*height_];
             memset(image_, 0, width_*height_*sizeof(RGBA8U));
-
-#ifdef USE_CUDA
-            cudaMalloc(&d_scene_p_, sizeof(Scene*));
-            new_kernel<<<1, 1>>>(d_scene_p_, width_, height_);
-
-            cudaMalloc(&d_image_, width_*height_*sizeof(RGBA8U));
-            cudaMemset(d_image_, 0, width_*height_*sizeof(RGBA8U));
-#endif 
             
             glEnable(GL_TEXTURE_2D);
  
@@ -171,28 +115,10 @@ namespace gtc
         {
             delete [] image_;
             delete scene_;
-
-#ifdef USE_CUDA
-            cudaFree(d_image_);
-
-            delete_kernel<<<1, 1>>>(d_scene_p_);
-            cudaFree(d_scene_p_);
-#endif
         }
 
         static void compute(void)
         {
-
-#ifdef USE_CUDA
-            dim3 grid_size(width_/16, height_/16);
-            dim3 block_size(16, 16);
-            
-            render_kernel<<<grid_size, block_size>>>(d_scene_p_, d_image_, width_, height_);
-
-            CUDA_ERROR_CHECK();
-
-            cudaMemcpy(image_, d_image_, width_*height_*sizeof(RGBA8U), cudaMemcpyDeviceToHost);
-#else
             
             for (int y=0; y<height_; ++y)
             {
@@ -202,7 +128,6 @@ namespace gtc
                 }
             }
 
-#endif
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 
                          width_, height_, 0, GL_RGBA,
                          GL_UNSIGNED_BYTE, image_);
@@ -261,13 +186,8 @@ namespace gtc
                 default:
                     break;
             }
-#ifdef USE_CUDA
-            //displace_view_kernel<<<1, 1>>>(d_scene_p_, displacement.V1(), displacement.V2(), displacement.V3());
-            displace_primitive_kernel<<<1, 1>>>(d_scene_p_, displacement.V1(), displacement.V2(), displacement.V3());
-#else
-            //scene_->displace_view(displace);
+
             scene_->displace_primitive(displacement);
-#endif
         }
     };
 
@@ -277,11 +197,6 @@ namespace gtc
     GLuint DrawImage::texture_ = 0;
     RGBA8U * DrawImage::image_ = NULL;
     Scene * DrawImage::scene_ = NULL;
-
-#ifdef USE_CUDA
-    RGBA8U * DrawImage::d_image_ = NULL;
-    Scene ** DrawImage::d_scene_p_ = NULL;
-#endif
 
 } /* namespace gtc */
 

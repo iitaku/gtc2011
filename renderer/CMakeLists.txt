@@ -18,6 +18,3 @@ add_definitions(-g)
 add_executable(cpu_renderer main.cpp)
 target_link_libraries(cpu_renderer ${GL_LIBRARIES} ${GLUT_LIBRARIES})
 
-set(CUDA_NVCC_FLAGS -D USE_CUDA -arch=sm_20)
-cuda_add_executable(gpu_renderer main.cu)
-target_link_libraries(gpu_renderer ${GL_LIBRARIES} ${GLUT_LIBRARIES})
