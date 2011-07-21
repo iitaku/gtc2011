@@ -17,6 +17,21 @@ class Primitive;
 
 static int frame_count = 0;
 
+struct Material
+{
+    RGBA color;
+    float reflection;   /* 0..1.0 */
+    float luminescence; /* 0..1.0 */
+    
+    FUNC_DECL
+    Material(void)
+        : color(), reflection(0.0f), luminescence(0.0f) {}
+    
+    FUNC_DECL
+    Material(const RGBA & _color, float _reflection, float _luminescence)
+        : color(_color), reflection(_reflection), luminescence(_luminescence) {}
+};
+
 struct Ray
 {
     Coord origin;
@@ -45,6 +60,20 @@ struct Ray
             return false;
         }
     }
+};
+
+struct Light
+{
+    RGBA color;
+    Ray ray;
+
+    FUNC_DECL
+    Light(void)
+        : color(), ray() {}
+
+    FUNC_DECL
+    Light(const RGBA & _color, const Ray & _ray)
+        : color(_color), ray(_ray) {}
 };
 
 struct Intersect
@@ -88,20 +117,6 @@ struct Intersect
     }
 };
 
-struct Material
-{
-    RGBA color;
-    float reflection;
-
-    FUNC_DECL
-    Material(void)
-        : color(), reflection(0) {}
-    
-    FUNC_DECL
-    Material(const RGBA & _color, float _reflection)
-        : color(_color), reflection(_reflection) {}
-};
-
 class Primitive
 {
 protected:
@@ -112,7 +127,7 @@ public:
     FUNC_DECL
     Primitive(void)
         : material_(), invisible_color_(RGBA(0, 0, 0)) {}
-
+    
     FUNC_DECL
     Primitive(const Material& material)
         : material_(material), invisible_color_(RGBA(0, 0, 0)) {}
@@ -120,7 +135,12 @@ public:
     /* calculate intersect between ray and itself */
     FUNC_DECL 
     virtual Intersect intersect(const Ray& ray) const = 0;
-    
+     
+    /* calculate lighting toward intersect coord */
+    FUNC_DECL 
+    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num,
+                           const Intersect & isect) const = 0;
+
     /* calculate shading at intersect coord */
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
@@ -142,6 +162,13 @@ public:
     }
     
     FUNC_DECL 
+    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num,
+                           const Intersect & isect) const
+    {
+        return Light();
+    }
+    
+    FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
                           Primitive ** primitives, unsigned int primitive_num,
                           const Intersect & isect) const
@@ -157,6 +184,7 @@ private:
     Coord v1_;
     Coord v2_;
 
+    Coord center_;
     Vector normal_;
 
     FUNC_DECL
@@ -173,21 +201,13 @@ public:
         : Primitive(), v0_(), v1_(), v2_() {}
 
     FUNC_DECL
-    Triangle(const Coord & v0,
-             const Coord & v1, 
-             const Coord & v2)
-           : Primitive(), v0_(v0), v1_(v1), v2_(v2)
-    {
-        normal_ = calc_normal();
-    }
-
-    FUNC_DECL
     Triangle(const Material & material,
              const Coord & v0,
              const Coord & v1, 
              const Coord & v2)
            : Primitive(material), v0_(v0), v1_(v1), v2_(v2)
     {
+        center_ = (v0_ + v1_ + v2) / 3.0f;
         normal_ = calc_normal();
     }
     
@@ -237,6 +257,55 @@ public:
         
         return Intersect(this, ray.strong, t, p, normal_, new_ray);
     }
+ 
+    FUNC_DECL 
+    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num,
+                           const Intersect & isect) const
+    {
+        if (0.0f < material_.luminescence)
+        {
+            float luminescence = 0.0f;
+            const Coord v[3] = {v0_, v1_, v2_};
+
+            for (unsigned int i=0; i<3; ++i)
+            {
+                Ray ray(v[i], isect.coord - v[i], 1.0f);
+
+                Intersect my_isect = isect.primitive->intersect(ray);
+
+                for (unsigned int j=0; j<primitive_num; ++j)
+                {
+                    const Primitive * primitive = primitives[j];
+
+                    if (this == primitive || NULL == primitive)
+                    {
+                        continue;
+                    }
+
+                    Intersect other_isect = primitive->intersect(ray);
+
+                    if (NULL != other_isect.primitive && 
+                        other_isect.distance < my_isect.distance)
+                    {
+                        break;
+                    }
+
+                    if (primitive_num-1 == j)
+                    {
+                        luminescence += material_.luminescence;
+                    }
+                }
+            }
+            
+            luminescence /= 3.0f;
+            
+            return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
+        }
+        else
+        {
+            return Light();
+        }
+    }
 
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
@@ -263,7 +332,7 @@ public:
                 Intersect other_isect;
                 const Primitive * primitive = primitives[j];
 
-                if (NULL == primitive)
+                if (this == primitive || NULL == primitive)
                 {
                     continue;
                 }
@@ -295,12 +364,7 @@ public:
     FUNC_DECL
     Sphere(void)
         : Primitive(), center_(), radius_(0) {}
-    
-    FUNC_DECL
-    Sphere(const Coord & center,
-           float radius)
-        : Primitive(), center_(center), radius_(radius) {}
-    
+       
     FUNC_DECL
     Sphere(const Material & material,
            const Coord & center,
@@ -338,7 +402,50 @@ public:
         
         return Intersect(this, ray.strong, t, p, n, new_ray);
     }
-    
+     
+    FUNC_DECL 
+    virtual Light lighting(Primitive ** primitives, unsigned int primitive_num,
+                           const Intersect & isect) const
+    {
+        if (0.0f < material_.luminescence)
+        {
+            float luminescence = 0.0f;
+
+            Ray ray(center_, isect.coord - center_, 1.0);
+
+            Intersect my_isect = isect.primitive->intersect(ray);
+
+            for (unsigned int j=0; j<primitive_num; ++j)
+            {
+                const Primitive * primitive = primitives[j];
+
+                if (this == primitive || NULL == primitive)
+                {
+                    continue;
+                }
+
+                Intersect other_isect = primitive->intersect(ray);
+
+                if (NULL != other_isect.primitive && 
+                        other_isect.distance < my_isect.distance)
+                {
+                    break;
+                }
+
+                if (primitive_num-1 == j)
+                {
+                    luminescence += material_.luminescence;
+                }
+            }
+            
+            return Light(material_.color, Ray(center_, isect.coord - center_, luminescence));
+        }
+        else
+        {
+            return Light();
+        }
+    }
+
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
                          Primitive ** primitives, unsigned int primitive_num,
@@ -416,77 +523,77 @@ public:
         
         primitives_[0] = new BackGround();
 #if 1
-        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5f), 
+        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5f, 0.0f), 
                               Coord(-0.7f, -0.6f, -3.0f), 0.7f);
 
-        primitives_[2] = new Sphere(Material(RGBA(0, 255, 255), 0.2f), 
+        primitives_[2] = new Sphere(Material(RGBA(0, 255, 255), 0.2f, 0.0f), 
                               Coord(+0.7f, -0.6f, -3.0f), 0.7f);
         
-        primitives_[3] = new Sphere(Material(RGBA(255, 255, 255), 1.0f), 
+        primitives_[3] = new Sphere(Material(RGBA(255, 255, 255), 1.0f, 0.0f), 
                               Coord(+0.0f, +0.6f, -3.0f), 0.7f);
 
         /* Floor */
-        primitives_[4] = new Triangle(Material(RGBA(128, 128, 128), 0.2f),
+        primitives_[4] = new Triangle(Material(RGBA(128, 128, 128), 0.2f, 0.0f),
                                 Coord(-4.0f, -4.0f, +8.0f), 
                                 Coord(-4.0f, -4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, +8.0f));
 
-        primitives_[5] = new Triangle(Material(RGBA(128, 128, 128), 0.2f),
+        primitives_[5] = new Triangle(Material(RGBA(128, 128, 128), 0.2f, 0.0f),
                                 Coord(-4.0f, -4.0f, -8.0f), 
                                 Coord(+4.0f, -4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, +8.0f));
 
         /* Loof */
-        primitives_[6] = new Triangle(Material(RGBA(64, 64, 64), 0.2f),
+        primitives_[6] = new Triangle(Material(RGBA(64, 64, 64), 0.2f, 0.0f),
                                 Coord(-4.0f, +4.0f, -8.0f), 
                                 Coord(-4.0f, +4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, +8.0f));
 
-        primitives_[7] = new Triangle(Material(RGBA(64, 64, 64), 0.2f),
+        primitives_[7] = new Triangle(Material(RGBA(64, 64, 64), 0.2f, 0.0f),
                                 Coord(+4.0f, +4.0f, +8.0f), 
                                 Coord(+4.0f, +4.0f, -8.0f),
                                 Coord(-4.0f, +4.0f, +8.0f));
  
         /* Front Wall */
-        primitives_[8] = new Triangle(Material(RGBA(255, 255, 255), 0.2f),
+        primitives_[8] = new Triangle(Material(RGBA(255, 255, 255), 0.2f, 0.0f),
                                 Coord(-4.0f, -4.0f, -8.0f), 
                                 Coord(-4.0f, +4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, -8.0f));
 
-        primitives_[9] = new Triangle(Material(RGBA(255, 255, 255), 0.2f),
+        primitives_[9] = new Triangle(Material(RGBA(255, 255, 255), 0.2f, 0.0f),
                                 Coord(+4.0f, +4.0f, -8.0f), 
                                 Coord(+4.0f, -4.0f, -8.0f),
                                 Coord(-4.0f, +4.0f, -8.0f));
 
         /* Left Wall */
-        primitives_[10] = new Triangle(Material(RGBA(255, 0, 0), 0.2f),
+        primitives_[10] = new Triangle(Material(RGBA(255, 0, 0), 0.2f, 0.0f),
                                  Coord(-4.0f, -4.0f, +8.0f), 
                                  Coord(-4.0f, +4.0f, +8.0f),
                                  Coord(-4.0f, -4.0f, -8.0f));
 
-        primitives_[11] = new Triangle(Material(RGBA(255, 0, 0), 0.2f),
+        primitives_[11] = new Triangle(Material(RGBA(255, 0, 0), 0.2f, 0.0f),
                                  Coord(-4.0f, +4.0f, -8.0f), 
                                  Coord(-4.0f, -4.0f, -8.0f),
                                  Coord(-4.0f, +4.0f, +8.0f));
         
         /* Right Wall */
-        primitives_[12] = new Triangle(Material(RGBA(0, 255, 0), 0.2f),
+        primitives_[12] = new Triangle(Material(RGBA(0, 255, 0), 0.2f, 0.0f),
                                 Coord(+4.0f, -4.0f, -8.0f), 
                                 Coord(+4.0f, +4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, +8.0f));
 
-        primitives_[13] = new Triangle(Material(RGBA(0, 255, 0), 0.2f),
+        primitives_[13] = new Triangle(Material(RGBA(0, 255, 0), 0.2f, 0.0f),
                                 Coord(+4.0f, +4.0f, +8.0f), 
                                 Coord(+4.0f, -4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, -8.0f));
 
 
 #elif 0
-        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 1.0), 
+        primitives_[1] = new Triangle(Material(RGBA(255, 255, 255), 1.0, 0.0f), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(+20.0, -20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
-        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 1.0), 
+        primitives_[2] = new Triangle(Material(RGBA(255, 255, 255), 1.0, 0.0f), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(-20.0, +20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
@@ -494,7 +601,7 @@ public:
         primitives_[4] = NULL;
         primitives_[5] = NULL;
 #else
-        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5), 
+        primitives_[1] = new Sphere(Material(RGBA(255, 255, 0), 0.5, 0.0f), 
                               Coord(0.0, 0.0, -3.0), 1.0);
         primitives_[2] = NULL;
         primitives_[3] = NULL;

@@ -134,7 +134,25 @@ namespace gtc
                                        static_cast<T>(static_cast<S>(this->v2_)*s), 
                                        static_cast<T>(static_cast<S>(this->v3_)*s));
             }
-            
+ 
+            /* div */
+            FUNC_DECL
+            ThreeElement<T> operator/(const ThreeElement<T>& rhs) const
+            {
+                return ThreeElement<T>(this->v1_/rhs.v1_, 
+                                       this->v2_/rhs.v2_, 
+                                       this->v3_/rhs.v3_);
+            }
+
+            template<typename S>
+            FUNC_DECL
+            ThreeElement<T> operator/(S s) const
+            {
+                return ThreeElement<T>(static_cast<T>(static_cast<S>(this->v1_)/s), 
+                                       static_cast<T>(static_cast<S>(this->v2_)/s), 
+                                       static_cast<T>(static_cast<S>(this->v3_)/s));
+            }
+           
             /* saturating add */
             FUNC_DECL
             ThreeElement<T> add_sat(const ThreeElement<T>& rhs) const
@@ -324,6 +342,26 @@ namespace gtc
                                       static_cast<T>(static_cast<S>(this->v2_)*s), 
                                       static_cast<T>(static_cast<S>(this->v3_)*s),
                                       static_cast<T>(static_cast<S>(this->v4_)*s));
+            }
+ 
+            /* div */
+            FUNC_DECL
+            FourElement<T> operator/(const FourElement<T>& rhs) const
+            {
+                return FourElement<T>(this->v1_/rhs.v1_, 
+                                      this->v2_/rhs.v2_, 
+                                      this->v3_/rhs.v3_,
+                                      this->v4_/rhs.v4_);
+            }
+
+            template<typename S>
+            FUNC_DECL
+            FourElement<T> operator/(S s) const
+            {
+                return FourElement<T>(static_cast<T>(static_cast<S>(this->v1_)/s), 
+                                      static_cast<T>(static_cast<S>(this->v2_)/s), 
+                                      static_cast<T>(static_cast<S>(this->v3_)/s),
+                                      static_cast<T>(static_cast<S>(this->v4_)/s));
             }
  
             /* saturating add */
