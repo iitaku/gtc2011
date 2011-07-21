@@ -13,7 +13,7 @@ namespace gtc
 {
 
 typedef RGBA8U RGBA;
-class Object;
+class Primitive;
 
 static int frame_count = 0;
 
@@ -49,7 +49,7 @@ struct Ray
 
 struct Intersect
 {
-    const Object * obj;
+    const Primitive * primitive;
     float reflection;
     float distance;
     Coord coord;
@@ -58,21 +58,21 @@ struct Intersect
    
     FUNC_DECL
     Intersect(void)
-        : obj(NULL), reflection(0.0f), distance(helper::make_inf()), coord(), normal(), ray() {}
+        : primitive(NULL), reflection(0.0f), distance(helper::make_inf()), coord(), normal(), ray() {}
     
     FUNC_DECL
-    Intersect(const Object * _obj, float _reflection, float _distance)
-        : obj(_obj), reflection(_reflection), distance(_distance), coord(), normal(), ray() {}
+    Intersect(const Primitive * _primitive, float _reflection, float _distance)
+        : primitive(_primitive), reflection(_reflection), distance(_distance), coord(), normal(), ray() {}
     
     FUNC_DECL
-    Intersect(const Object * _obj, float _reflection, float _distance,
+    Intersect(const Primitive * _primitive, float _reflection, float _distance,
               const Coord & _coord, const Vector & _normal, const Ray & _ray)
-        : obj(_obj), reflection(_reflection), distance(_distance), coord(_coord), normal(_normal), ray(_ray) {}
+        : primitive(_primitive), reflection(_reflection), distance(_distance), coord(_coord), normal(_normal), ray(_ray) {}
 
     FUNC_DECL
     bool operator==(const Intersect & rhs)
     {
-        if (this->obj == rhs.obj &&
+        if (this->primitive == rhs.primitive &&
             this->reflection == rhs.reflection && 
             this->distance == rhs.distance &&
             this->coord == rhs.coord &&
@@ -102,7 +102,7 @@ struct Material
         : color(_color), reflection(_reflection) {}
 };
 
-class Object
+class Primitive
 {
 protected:
     const unsigned int id_;
@@ -111,11 +111,11 @@ protected:
 
 public:    
     FUNC_DECL
-    Object(unsigned int id)
+    Primitive(unsigned int id)
         : id_(id), material_(), invisible_color_(RGBA(0, 0, 0)) {}
 
     FUNC_DECL
-    Object(unsigned int id, const Material& material)
+    Primitive(unsigned int id, const Material& material)
         : id_(id), material_(material), invisible_color_(RGBA(0, 0, 0)) {}
 
     FUNC_DECL 
@@ -123,16 +123,16 @@ public:
     
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
-                          Object ** objs, unsigned int obj_num,
+                          Primitive ** primitives, unsigned int primitive_num,
                           const Intersect & isect) const = 0;
 };
 
-class BackGround : public Object
+class BackGround : public Primitive
 {
 public:
     FUNC_DECL
     BackGround()
-        : Object(0) {}
+        : Primitive(0) {}
     
     FUNC_DECL 
     virtual Intersect intersect(const Ray& ray) const
@@ -142,14 +142,14 @@ public:
     
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
-                          Object ** objs, unsigned int obj_num,
+                          Primitive ** primitives, unsigned int primitive_num,
                           const Intersect & isect) const
     {
         return invisible_color_;
     }
 };
 
-class Triangle : public Object
+class Triangle : public Primitive
 {
 private:
     Coord v0_;
@@ -169,14 +169,14 @@ private:
 public:
     FUNC_DECL
     Triangle(unsigned int id)
-        : Object(id), v0_(), v1_(), v2_() {}
+        : Primitive(id), v0_(), v1_(), v2_() {}
 
     FUNC_DECL
     Triangle(unsigned int id,
              const Coord & v0,
              const Coord & v1, 
              const Coord & v2)
-           : Object(id), v0_(v0), v1_(v1), v2_(v2)
+           : Primitive(id), v0_(v0), v1_(v1), v2_(v2)
     {
         normal_ = calc_normal();
     }
@@ -187,7 +187,7 @@ public:
              const Coord & v0,
              const Coord & v1, 
              const Coord & v2)
-           : Object(id, material), v0_(v0), v1_(v1), v2_(v2)
+           : Primitive(id, material), v0_(v0), v1_(v1), v2_(v2)
     {
         normal_ = calc_normal();
     }
@@ -241,7 +241,7 @@ public:
 
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
-                         Object ** objs, unsigned int obj_num,
+                         Primitive ** primitives, unsigned int primitive_num,
                          const Intersect & isect) const
     { 
         RGBA pixel = material_.color;
@@ -252,29 +252,29 @@ public:
             
             if (isect.normal.dot(light-isect.coord) <= 0.0f)
             {
-                return Object::invisible_color_;
+                return Primitive::invisible_color_;
             }
  
             Ray ray(light, isect.coord - light, 1.0);
 
-            Intersect my_isect = objs[id_]->intersect(ray);
+            Intersect my_isect = primitives[id_]->intersect(ray);
 
-            for (unsigned int j=0; j<obj_num; ++j)
+            for (unsigned int j=0; j<primitive_num; ++j)
             {
                 Intersect other_isect;
-                const Object * obj = objs[j];
+                const Primitive * primitive = primitives[j];
 
-                if (id_ == j || NULL == obj)
+                if (id_ == j || NULL == primitive)
                 {
                     continue;
                 }
 
-                other_isect = obj->intersect(ray);
+                other_isect = primitive->intersect(ray);
                 
-                if (NULL != other_isect.obj && 
+                if (NULL != other_isect.primitive && 
                     other_isect.distance < my_isect.distance)
                 {
-                    return Object::invisible_color_;
+                    return Primitive::invisible_color_;
                 }
             }
             
@@ -286,7 +286,7 @@ public:
     }
 };
 
-class Sphere : public Object
+class Sphere : public Primitive
 {
 private:
     Coord center_;
@@ -295,20 +295,20 @@ private:
 public:
     FUNC_DECL
     Sphere(unsigned int id)
-        : Object(id), center_(), radius_(0) {}
+        : Primitive(id), center_(), radius_(0) {}
     
     FUNC_DECL
     Sphere(unsigned int id,
            const Coord & center,
            float radius)
-        : Object(id), center_(center), radius_(radius) {}
+        : Primitive(id), center_(center), radius_(radius) {}
     
     FUNC_DECL
     Sphere(unsigned int id,
            const Material & material,
            const Coord & center,
            float radius)
-        : Object(id, material), center_(center), radius_(radius) {}
+        : Primitive(id, material), center_(center), radius_(radius) {}
 
     FUNC_DECL
     virtual Intersect intersect(const Ray& ray) const
@@ -344,7 +344,7 @@ public:
     
     FUNC_DECL 
     virtual RGBA shading(Coord * lights, unsigned int light_num,
-                         Object ** objs, unsigned int obj_num,
+                         Primitive ** primitives, unsigned int primitive_num,
                          const Intersect & isect) const
     {
         RGBA pixel = material_.color;
@@ -355,29 +355,29 @@ public:
 
             if (isect.normal.dot(light-isect.coord) <= 0.0f)
             {
-                return Object::invisible_color_;
+                return Primitive::invisible_color_;
             }
 
             Ray ray(light, isect.coord - light, 1.0);
 
-            Intersect my_isect = objs[id_]->intersect(ray);
+            Intersect my_isect = primitives[id_]->intersect(ray);
 
-            for (unsigned int j=0; j<obj_num; ++j)
+            for (unsigned int j=0; j<primitive_num; ++j)
             {
                 Intersect other_isect;
-                const Object * obj = objs[j];
+                const Primitive * primitive = primitives[j];
 
-                if (id_ == j || NULL == obj)
+                if (id_ == j || NULL == primitive)
                 {
                     continue;
                 }
 
-                other_isect = obj->intersect(ray);
+                other_isect = primitive->intersect(ray);
                 
-                if (NULL != other_isect.obj && 
+                if (NULL != other_isect.primitive && 
                     other_isect.distance < my_isect.distance)
                 {
-                    return Object::invisible_color_;
+                    return Primitive::invisible_color_;
                 }
             }
 
@@ -402,7 +402,7 @@ private:
     
     Coord lights_[LIGHT_NUM];
 
-    Object * objs_[OBJECT_NUM];
+    Primitive * primitives_[OBJECT_NUM];
    
 public:
     
@@ -417,92 +417,92 @@ public:
                 
         lights_[0] = Coord(0.0, 5.0, 1.0);
         
-        objs_[0] = new BackGround();
+        primitives_[0] = new BackGround();
 #if 1
-        objs_[1] = new Sphere(1, Material(RGBA(255, 255, 0), 0.2f), 
+        primitives_[1] = new Sphere(1, Material(RGBA(255, 255, 0), 0.2f), 
                               Coord(-0.7f, -0.6f, -3.0f), 0.7f);
 
-        objs_[2] = new Sphere(2, Material(RGBA(0, 255, 255), 0.2f), 
+        primitives_[2] = new Sphere(2, Material(RGBA(0, 255, 255), 0.2f), 
                               Coord(+0.7f, -0.6f, -3.0f), 0.7f);
         
-        objs_[3] = new Sphere(3, Material(RGBA(255, 255, 255), 1.0f), 
+        primitives_[3] = new Sphere(3, Material(RGBA(255, 255, 255), 1.0f), 
                               Coord(+0.0f, +0.6f, -3.0f), 0.7f);
 
         /* Floor */
-        objs_[4] = new Triangle(4, Material(RGBA(128, 128, 128), 0.2f),
+        primitives_[4] = new Triangle(4, Material(RGBA(128, 128, 128), 0.2f),
                                 Coord(-4.0f, -4.0f, +8.0f), 
                                 Coord(-4.0f, -4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, +8.0f));
 
-        objs_[5] = new Triangle(5, Material(RGBA(128, 128, 128), 0.2f),
+        primitives_[5] = new Triangle(5, Material(RGBA(128, 128, 128), 0.2f),
                                 Coord(-4.0f, -4.0f, -8.0f), 
                                 Coord(+4.0f, -4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, +8.0f));
 
         /* Loof */
-        objs_[6] = new Triangle(6, Material(RGBA(64, 64, 64), 0.2f),
+        primitives_[6] = new Triangle(6, Material(RGBA(64, 64, 64), 0.2f),
                                 Coord(-4.0f, +4.0f, -8.0f), 
                                 Coord(-4.0f, +4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, +8.0f));
 
-        objs_[7] = new Triangle(7, Material(RGBA(64, 64, 64), 0.2f),
+        primitives_[7] = new Triangle(7, Material(RGBA(64, 64, 64), 0.2f),
                                 Coord(+4.0f, +4.0f, +8.0f), 
                                 Coord(+4.0f, +4.0f, -8.0f),
                                 Coord(-4.0f, +4.0f, +8.0f));
  
         /* Front Wall */
-        objs_[8] = new Triangle(8, Material(RGBA(255, 255, 255), 0.2f),
+        primitives_[8] = new Triangle(8, Material(RGBA(255, 255, 255), 0.2f),
                                 Coord(-4.0f, -4.0f, -8.0f), 
                                 Coord(-4.0f, +4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, -8.0f));
 
-        objs_[9] = new Triangle(9, Material(RGBA(255, 255, 255), 0.2f),
+        primitives_[9] = new Triangle(9, Material(RGBA(255, 255, 255), 0.2f),
                                 Coord(+4.0f, +4.0f, -8.0f), 
                                 Coord(+4.0f, -4.0f, -8.0f),
                                 Coord(-4.0f, +4.0f, -8.0f));
 
         /* Left Wall */
-        objs_[10] = new Triangle(10, Material(RGBA(255, 0, 0), 0.2f),
+        primitives_[10] = new Triangle(10, Material(RGBA(255, 0, 0), 0.2f),
                                  Coord(-4.0f, -4.0f, +8.0f), 
                                  Coord(-4.0f, +4.0f, +8.0f),
                                  Coord(-4.0f, -4.0f, -8.0f));
 
-        objs_[11] = new Triangle(11, Material(RGBA(255, 0, 0), 0.2f),
+        primitives_[11] = new Triangle(11, Material(RGBA(255, 0, 0), 0.2f),
                                  Coord(-4.0f, +4.0f, -8.0f), 
                                  Coord(-4.0f, -4.0f, -8.0f),
                                  Coord(-4.0f, +4.0f, +8.0f));
         
         /* Right Wall */
-        objs_[12] = new Triangle(12, Material(RGBA(0, 255, 0), 0.2f),
+        primitives_[12] = new Triangle(12, Material(RGBA(0, 255, 0), 0.2f),
                                 Coord(+4.0f, -4.0f, -8.0f), 
                                 Coord(+4.0f, +4.0f, -8.0f),
                                 Coord(+4.0f, -4.0f, +8.0f));
 
-        objs_[13] = new Triangle(13, Material(RGBA(0, 255, 0), 0.2f),
+        primitives_[13] = new Triangle(13, Material(RGBA(0, 255, 0), 0.2f),
                                 Coord(+4.0f, +4.0f, +8.0f), 
                                 Coord(+4.0f, -4.0f, +8.0f),
                                 Coord(+4.0f, +4.0f, -8.0f));
 
 
 #elif 0
-        objs_[1] = new Triangle(1, Material(RGBA(255, 255, 255), 1.0), 
+        primitives_[1] = new Triangle(1, Material(RGBA(255, 255, 255), 1.0), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(+20.0, -20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
-        objs_[2] = new Triangle(2, Material(RGBA(255, 255, 255), 1.0), 
+        primitives_[2] = new Triangle(2, Material(RGBA(255, 255, 255), 1.0), 
                                 Coord(-20.0, -20.0, -1.0),
                                 Coord(-20.0, +20.0, -1.0),
                                 Coord(+20.0, +20.0, -1.0));
-        objs_[3] = NULL;
-        objs_[4] = NULL;
-        objs_[5] = NULL;
+        primitives_[3] = NULL;
+        primitives_[4] = NULL;
+        primitives_[5] = NULL;
 #else
-        objs_[1] = new Sphere(1, Material(RGBA(255, 255, 0), 0.5), 
+        primitives_[1] = new Sphere(1, Material(RGBA(255, 255, 0), 0.5), 
                               Coord(0.0, 0.0, -3.0), 1.0);
-        objs_[2] = NULL;
-        objs_[3] = NULL;
-        objs_[4] = NULL;
-        objs_[5] = NULL;
+        primitives_[2] = NULL;
+        primitives_[3] = NULL;
+        primitives_[4] = NULL;
+        primitives_[5] = NULL;
 #endif
     
     }
@@ -512,7 +512,7 @@ public:
     {
         for (int i=0; i<OBJECT_NUM; ++i)
         {
-            delete objs_[i];
+            delete primitives_[i];
         }
     }
 
@@ -539,19 +539,19 @@ public:
             {
                 Intersect isect;
 
-                if (NULL == objs_[i])
+                if (NULL == primitives_[i])
                 {
                     continue;
                 }
 
-                if (0 < reflect_count && isects[reflect_count-1].obj == objs_[i])
+                if (0 < reflect_count && isects[reflect_count-1].primitive == primitives_[i])
                 {
                     continue;
                 }
 
-                isect = objs_[i]->intersect(ray);
+                isect = primitives_[i]->intersect(ray);
                 
-                if (NULL != isect.obj)
+                if (NULL != isect.primitive)
                 {
                     if (isect.distance < isects[reflect_count].distance)
                     {
@@ -564,17 +564,17 @@ public:
                        
             reflect_count++;
 
-        } while (NULL != isects[reflect_count-1].obj && 
+        } while (NULL != isects[reflect_count-1].primitive && 
                  0.0f < isects[reflect_count-1].reflection &&
                  reflect_count < REFLECT_NUM);
        
         for (unsigned int i=0; i<reflect_count; ++i)
         {
-            if (NULL != isects[i].obj)
+            if (NULL != isects[i].primitive)
             {
-                pixel = pixel.add_sat(isects[i].obj->shading(&lights_[0], 
+                pixel = pixel.add_sat(isects[i].primitive->shading(&lights_[0], 
                                                              LIGHT_NUM, 
-                                                             &objs_[0], 
+                                                             &primitives_[0], 
                                                              OBJECT_NUM, 
                                                              isects[i]));
             }

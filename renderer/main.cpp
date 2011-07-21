@@ -32,5 +32,7 @@ int main(int argc, char* argv[])
     Display<DrawImage> display(argc, argv, width, height);
     display.loop();
 
+    display.finish();
+
     return 0;
 }
